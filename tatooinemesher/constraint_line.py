@@ -25,7 +25,8 @@ class ConstraintLine:
     - build_interp_chs
     - coord_sampling_along_line
     """
-    def __init__(self, id, coord, interp_coord='LINEAR'):
+
+    def __init__(self, id, coord, interp_coord="LINEAR"):
         """
         Create a ConstraintLine instance from X and Y coordinates
         @id <integer>: unique identifier (automatic numbering starting from 0)
@@ -36,17 +37,19 @@ class ConstraintLine:
         self.id = id
         self.nb_points = len(coord)
         self.coord = np.array(coord)
-        Xt = np.sqrt(np.power(np.ediff1d(self.coord[:, 0], to_begin=0.), 2) +
-                     np.power(np.ediff1d(self.coord[:, 1], to_begin=0.), 2))
+        Xt = np.sqrt(
+            np.power(np.ediff1d(self.coord[:, 0], to_begin=0.0), 2)
+            + np.power(np.ediff1d(self.coord[:, 1], to_begin=0.0), 2)
+        )
         self.Xt = Xt.cumsum()
         self.geom = LineString(coord)
 
-        if interp_coord == 'LINEAR':
+        if interp_coord == "LINEAR":
             self.interp = self.build_interp_linear()
         else:
-            if interp_coord == 'CARDINAL':
+            if interp_coord == "CARDINAL":
                 tan_method = CubicHermiteSpline.CARDINAL
-            elif interp_coord == 'FINITE_DIFF':
+            elif interp_coord == "FINITE_DIFF":
                 tan_method = CubicHermiteSpline.FINITE_DIFF
             else:
                 raise NotImplementedError
@@ -56,20 +59,20 @@ class ConstraintLine:
         return "ConstraintLine #{} ({} points)".format(self.id, self.nb_points)
 
     @staticmethod
-    def get_lines_from_file(filename, interp_coord='LINEAR'):
+    def get_lines_from_file(filename, interp_coord="LINEAR"):
         """
         Returns a list of ConstraintLine from an input file
         TODO 1: Value is ignored in i2s file format
         """
         lines = []
         if filename is not None:
-            if filename.endswith('.i2s'):
+            if filename.endswith(".i2s"):
                 with bk.Read(filename) as in_i2s:
                     in_i2s.read_header()
                     for i, line in enumerate(in_i2s.get_open_polylines()):
                         lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord))
 
-            elif filename.endswith('.shp'):
+            elif filename.endswith(".shp"):
                 if shp.get_shape_type(filename) not in (shapefile.POLYLINE, shapefile.POLYLINEZ, shapefile.POLYLINEM):
                     raise TatooineException("The type of file %s is not POLYLINEZ[M]" % filename)
                 for i, line in enumerate(shp.get_open_polylines(filename)):
@@ -81,7 +84,7 @@ class ConstraintLine:
         return lines
 
     @staticmethod
-    def get_lines_and_set_limits_from_sections(section_seq, interp_coord='LINEAR'):
+    def get_lines_and_set_limits_from_sections(section_seq, interp_coord="LINEAR"):
         """
         @brief: Returns a list of ConstraintLine from an sequence of cross-sections
         @param section_seq <CrossSectionSequence>: sequence of cross-sections
@@ -93,13 +96,12 @@ class ConstraintLine:
         for section in section_seq:
             first_coords.append(section.geom.coords[0][:2])
             last_coords.append(section.geom.coords[-1][:2])
-        lines = [ConstraintLine(0, first_coords, interp_coord),
-                 ConstraintLine(1, last_coords, interp_coord)]
+        lines = [ConstraintLine(0, first_coords, interp_coord), ConstraintLine(1, last_coords, interp_coord)]
 
         # Set limits
         for line_id, line in enumerate(lines):
             for section, Xt_line in zip(section_seq, line.Xt):
-                Xt_section = section.coord.array['Xt'][0] if line_id == 0 else section.coord.array['Xt'][-1]
+                Xt_section = section.coord.array["Xt"][0] if line_id == 0 else section.coord.array["Xt"][-1]
                 intersection = section.geom.interpolate(Xt_section)
                 section.add_limit(line_id, Xt_section, Xt_line, intersection)
 
@@ -109,12 +111,14 @@ class ConstraintLine:
         """
         @brief: Build a double linear interpolator for X and Y coordinates
         """
+
         def interp_xy_linear(Xt_new):
             coord_int = []
             for dist in Xt_new:
                 point = self.geom.interpolate(dist)
                 coord_int.append(point.coords[0][:2])
-            return np.array(coord_int, dtype=float_vars(['X', 'Y']))
+            return np.array(coord_int, dtype=float_vars(["X", "Y"]))
+
         return interp_xy_linear
 
     def build_interp_chs(self, tan_method):
@@ -133,8 +137,9 @@ class ConstraintLine:
                 x = spline_x.evaluate(dist)
                 y = spline_y.evaluate(dist)
                 coord_int.append((x, y))
-            np_coord_int = np.array(coord_int, dtype=float_vars(['X', 'Y']))
+            np_coord_int = np.array(coord_int, dtype=float_vars(["X", "Y"]))
             return np_coord_int
+
         return interp_xy_chs
 
     def coord_sampling_along_line(self, Xp1, Xp2, Xp_adm_int):
@@ -146,6 +151,6 @@ class ConstraintLine:
         @param: Xp2 <float>: ending curvilinear distance
         """
         # Building list of curvilinear distance in meters
-        Xp = (1 - Xp_adm_int)*Xp1 + Xp_adm_int*Xp2
+        Xp = (1 - Xp_adm_int) * Xp1 + Xp_adm_int * Xp2
         # Use coordinate interpolator
         return self.interp(Xp)

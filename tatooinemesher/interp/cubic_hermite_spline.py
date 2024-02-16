@@ -1,10 +1,9 @@
-
-
 class CubicHermiteSpline:
     """
     CubicHermiteSpline: Generate a cubic Hermite spline from a key points.
     Key points: [[x0, y0], [x1, y1], [x2, y2], ...].
     """
+
     FINITE_DIFF = 0  # Tangent method: finite difference method
     CARDINAL = 1  # Tangent method: Cardinal spline (c is used)
     ZERO = 0  # End tangent: zero
@@ -16,7 +15,7 @@ class CubicHermiteSpline:
         M = 0.0  # Gradient
 
         def __str__(self):
-            return '[' + str(self.X) + ', ' + str(self.Y) + ', ' + str(self.M) + ']'
+            return "[" + str(self.X) + ", " + str(self.Y) + ", " + str(self.M) + "]"
 
     def __init__(self):
         self.idx_prev = 0
@@ -37,7 +36,7 @@ class CubicHermiteSpline:
         if abs(x - self.KeyPts[-1].X) < 1.0e-6:
             idx = len(self.KeyPts) - 2
         if idx < 0 or idx >= len(self.KeyPts) - 1:
-            print('WARNING: Given t= %f is out of the key points (index: %i)' % (x, idx))
+            print("WARNING: Given t= %f is out of the key points (index: %i)" % (x, idx))
             if idx < 0:
                 idx = 0
                 x = self.KeyPts[0].X
@@ -52,7 +51,7 @@ class CubicHermiteSpline:
 
         self.idx_prev = idx
         p0 = self.KeyPts[idx]
-        p1 = self.KeyPts[idx+1]
+        p1 = self.KeyPts[idx + 1]
         xr = (x - p0.X) / (p1.X - p0.X)
         return h00(xr) * p0.Y + h10(xr) * (p1.X - p0.X) * p0.M + h01(xr) * p1.Y + h11(xr) * (p1.X - p0.X) * p1.M
 
@@ -63,7 +62,8 @@ class CubicHermiteSpline:
             self.KeyPts[idx].Y = data[idx][1]
 
         grad = lambda idx1, idx2: (self.KeyPts[idx2].Y - self.KeyPts[idx1].Y) / (
-                self.KeyPts[idx2].X - self.KeyPts[idx1].X)
+            self.KeyPts[idx2].X - self.KeyPts[idx1].X
+        )
 
         for idx in range(1, len(self.KeyPts) - 1):
             self.KeyPts[idx].M = 0.0
