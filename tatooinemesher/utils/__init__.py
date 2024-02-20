@@ -1,12 +1,12 @@
 import logging
 from math import ceil, sqrt
+
 import numpy as np
 import shapefile
-
 from crue10.utils import logger as crue10_logger
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
+from pyteltools.geom import BlueKenue as bk
+from pyteltools.geom import Shapefile as shp
 from pyteltools.utils.log import set_logger_level as set_pyteltools_logger_level
-
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()

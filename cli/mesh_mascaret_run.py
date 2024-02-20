@@ -3,25 +3,25 @@ mesh_mascaret_run.py
 
 Mesh Mascaret geometry and results if specified
 """
-from math import sqrt
-import numpy as np
+
 import os.path
-from pyteltools.slf import Serafin
 import sys
+from math import sqrt
 from time import perf_counter
 
+import numpy as np
 from crue10.utils import ExceptionCrue10
 from mascaret.mascaret_file import MascaretFile
 from mascaret.mascaretgeo_file import MascaretGeoFile
+from pyteltools.slf import Serafin
 
 from tatooinemesher.constraint_line import ConstraintLine
 from tatooinemesher.mesh_constructor import MeshConstructor
 from tatooinemesher.section import CrossSection, CrossSectionSequence
+from tatooinemesher.utils import TatooineException, logger, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
-from tatooinemesher.utils import logger, set_logger_level, TatooineException
 
-
-VARIABLES_FROM_GEOMETRY = ['B']
+VARIABLES_FROM_GEOMETRY = ["B"]
 
 
 def mesh_mascaret_run(args):
@@ -43,17 +43,16 @@ def mesh_mascaret_run(args):
         dist_proj_axe = 0.0
         prev_x, prev_y = 0.0, 0.0
         for section_idx, masc_section in enumerate(reach):
-            section = CrossSection(masc_section.id,
-                                   [(x, y) for x, y in zip(masc_section.x, masc_section.y)],
-                                   "Cross-section")
+            section = CrossSection(
+                masc_section.id, [(x, y) for x, y in zip(masc_section.x, masc_section.y)], "Cross-section"
+            )
 
             section.coord.values = np.core.records.fromarrays(
-                np.column_stack((masc_section.z,)).T,
-                names=VARIABLES_FROM_GEOMETRY
+                np.column_stack((masc_section.z,)).T, names=VARIABLES_FROM_GEOMETRY
             )
             x, y = masc_section.axis
             if section_idx != 0:
-                dist_proj_axe += sqrt((x - prev_x)**2 + (y - prev_y)**2)
+                dist_proj_axe += sqrt((x - prev_x) ** 2 + (y - prev_y) ** 2)
 
             section.dist_proj_axe = dist_proj_axe
             prev_x, prev_y = x, y
@@ -63,11 +62,16 @@ def mesh_mascaret_run(args):
         if len(section_seq) >= 2:
             section_seq.check_intersections()
             # section_seq.sort_by_dist() is useless because cross-sections are already sorted
-            constraint_lines = ConstraintLine.get_lines_and_set_limits_from_sections(section_seq,
-                                                                                     args.interp_constraint_lines)
+            constraint_lines = ConstraintLine.get_lines_and_set_limits_from_sections(
+                section_seq, args.interp_constraint_lines
+            )
 
-            mesh_constr = MeshConstructor(section_seq=section_seq, lat_step=args.lat_step,
-                                          nb_pts_lat=args.nb_pts_lat, interp_values=args.interp_values)
+            mesh_constr = MeshConstructor(
+                section_seq=section_seq,
+                lat_step=args.lat_step,
+                nb_pts_lat=args.nb_pts_lat,
+                interp_values=args.interp_values,
+            )
             mesh_constr.build_interp(constraint_lines, args.long_step, args.constant_long_disc)
             mesh_constr.build_mesh(in_floworiented_crs=True)
 
@@ -85,34 +89,37 @@ def mesh_mascaret_run(args):
         masc_res.get_reaches()
         nb_section_in_geom = masc_geo.nsections
         if masc_res.nsections != nb_section_in_geom:
-            raise TatooineException("The number of sections is different between geometry (%i) and results file (%i)"
-                                    % (nb_section_in_geom, masc_res.nsections))
+            raise TatooineException(
+                "The number of sections is different between geometry (%i) and results file (%i)"
+                % (nb_section_in_geom, masc_res.nsections)
+            )
 
-        varnames_1d = masc_res.varnames_dict['abbr']
+        varnames_1d = masc_res.varnames_dict["abbr"]
         logger.info("Variables 1D available at sections: %s" % varnames_1d)
         try:
-            pos_z = varnames_1d.index('Z')
+            pos_z = varnames_1d.index("Z")
         except ValueError:
             raise TatooineException("The variable Z must be present in the results file")
 
-        additional_variables_id = ['H']
+        additional_variables_id = ["H"]
 
         values_geom = global_mesh_constr.interp_values_from_geom()
         z_bottom = values_geom[0, :]
         with Serafin.Write(args.outfile_mesh, args.lang, overwrite=True) as resout:
-            title = '%s (written by TatooineMesher)' % os.path.basename(args.outfile_mesh)
+            title = "%s (written by TatooineMesher)" % os.path.basename(args.outfile_mesh)
             output_header = Serafin.SerafinHeader(title=title, lang=args.lang)
-            output_header.from_triangulation(global_mesh_constr.triangle['vertices'],
-                                             global_mesh_constr.triangle['triangles'] + 1)
+            output_header.from_triangulation(
+                global_mesh_constr.triangle["vertices"], global_mesh_constr.triangle["triangles"] + 1
+            )
             for var_name in VARIABLES_FROM_GEOMETRY:
-                if var_name == 'B':
+                if var_name == "B":
                     output_header.add_variable_from_ID(var_name)
                 else:
-                    output_header.add_variable_str(var_name, var_name, '')
+                    output_header.add_variable_str(var_name, var_name, "")
             for var_id in additional_variables_id:
                 output_header.add_variable_from_ID(var_id)
             for var_name in varnames_1d:
-                output_header.add_variable_str(var_name, var_name, '')
+                output_header.add_variable_str(var_name, var_name, "")
             resout.write_header(output_header)
 
             for idx_time, time in enumerate(masc_res.times):
@@ -145,7 +152,7 @@ parser.infile_args.add_argument("--infile_res", help="Mascaret results file (*.o
 parser.add_out_mesh_file()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = parser.parse_args()
     try:
         mesh_mascaret_run(args)

@@ -1,6 +1,5 @@
 import argparse
 
-
 LINE_WIDTH = 80
 
 

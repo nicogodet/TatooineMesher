@@ -1,21 +1,22 @@
-from jinja2 import Environment, FileSystemLoader
 import math
-import numpy as np
-from numpy.lib.recfunctions import append_fields, rename_fields
 import os.path
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
+import time
+
+import numpy as np
+import shapefile
+import triangle
+from jinja2 import Environment, FileSystemLoader
+from numpy.lib.recfunctions import append_fields, rename_fields
+from pyteltools.geom import BlueKenue as bk
+from pyteltools.geom import Shapefile as shp
 from pyteltools.geom import geometry
 from pyteltools.slf import Serafin
 from pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
 from scipy import interpolate
-import shapefile
 from shapely.geometry import Point
-import time
-import triangle
 
 from tatooinemesher.section import Bed
-from tatooinemesher.utils import float_vars, logger, TatooineException
-
+from tatooinemesher.utils import TatooineException, float_vars, logger
 
 DIGITS = 4  # for csv and xml exports
 COURLIS_FLOAT_FMT = "%.6f"
@@ -458,7 +459,7 @@ class MeshConstructor:
             raise TatooineException("Only the shp format is supported for segments")
 
     def export_sections(self, path):
-        """
+        r"""
         Export generated profiles in a shp, i3s or georefC file
         /!\ Not relevant if constant_long_disc is False
         TODO: Use class MascaretGeoFile
@@ -499,7 +500,7 @@ class MeshConstructor:
         if path.endswith(".i3s"):
             with bk.Write(path) as out_i3s:
                 out_i3s.write_header()
-                out_i3s.write_lines(lines, [l.attributes()[0] for l in lines])
+                out_i3s.write_lines(lines, [line.attributes()[0] for line in lines])
 
         elif path.endswith(".shp"):
             shp.write_shp_lines(path, shapefile.POLYLINEZ, lines, "Z")

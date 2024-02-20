@@ -1,9 +1,10 @@
 from copy import deepcopy
+
 import numpy as np
 from numpy.lib.recfunctions import append_fields
 from shapely.geometry import LineString, Point
 
-from tatooinemesher.utils import logger, strictly_increasing, TatooineException
+from tatooinemesher.utils import TatooineException, logger, strictly_increasing
 
 
 class Coord:
@@ -76,7 +77,7 @@ class Coord:
             self.array = append_fields(self.array, "Xt", Xt, usemask=False)
 
     def compute_xt(self):
-        """
+        r"""
         Compute dimensionless curvilinear distance `xt` (from 0 to 1)
         /!\ Column `Xt` has to exist
         """

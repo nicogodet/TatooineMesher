@@ -1,21 +1,23 @@
+import math
+import os.path
 from collections import OrderedDict
 from copy import deepcopy
-import math
+
 import matplotlib.pyplot as plt
 import numpy as np
-import os.path
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
 import shapefile
+from pyteltools.geom import BlueKenue as bk
+from pyteltools.geom import Shapefile as shp
 from shapely.geometry import LineString, MultiPoint, Point
 
 from tatooinemesher.coord import Coord
 from tatooinemesher.utils import (
+    TatooineException,
     float_vars,
     get_field_index,
     get_intersections,
     logger,
     strictly_increasing,
-    TatooineException,
 )
 
 
@@ -148,7 +150,7 @@ class CrossSection:
         return out_limits
 
     def extract_bed(self, bed1_id, bed2_id):
-        """
+        r"""
         @brief: Extract coordinates of a portion of a cross-section between 2 limits
             /!\ bed1_id and bed2_id should be "ordered" correctly, otherwise an exception is raised
         @return <Bed>: structured array with columns ('X', 'Y', 'Xt', 'xt')
@@ -188,7 +190,7 @@ class CrossSection:
 
         # Check order of points
         if not strictly_increasing(sub_coord["Xt"]):
-            logger.debug("/!\ Xt values are not strictly increasing")  # FIXME: It should not happen!
+            logger.debug(r"/!\ Xt values are not strictly increasing")  # FIXME: It should not happen!
             logger.debug(sub_coord["Xt"])
             logger.debug("Please check the following limits below:")
             logger.debug(limit1)
@@ -205,7 +207,7 @@ class CrossSection:
         self.limits = OrderedDict(sorted(self.limits.items(), key=lambda x: x[1]["Xt_section"]))
 
     def compute_nb_pts_inter(self, other, long_dist):
-        """
+        r"""
         @brief: Compute the number of intermediate cross-sections required
         /!\ This counter includes points at bounds (start and end)
         @param other <CrossSection>: other cross-section
@@ -473,7 +475,7 @@ class CrossSectionSequence:
                 logger.warn("- between '{}' and '{}'".format(self[i], self[j]))
 
     def compute_dist_proj_axe(self, axe_geom, dist_max):
-        """
+        r"""
         @brief: Compute distance along hydraulic axis
         @param axe_geom <shapely.geometry.LineString>: hydraulic axis (/!\ Beware of its orientation)
         @param dist_max <float>: maximum search distance to rescue intersections for limits

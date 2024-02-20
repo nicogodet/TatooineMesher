@@ -1,10 +1,11 @@
 import numpy as np
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
 import shapefile
+from pyteltools.geom import BlueKenue as bk
+from pyteltools.geom import Shapefile as shp
 from shapely.geometry import LineString
 
 from tatooinemesher.interp.cubic_hermite_spline import CubicHermiteSpline
-from tatooinemesher.utils import float_vars, TatooineException
+from tatooinemesher.utils import TatooineException, float_vars
 
 
 class ConstraintLine:

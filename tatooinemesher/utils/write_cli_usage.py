@@ -3,10 +3,9 @@ Write a markdown documentation file for command line scripts.
 """
 
 import importlib
-from glob import glob
 import os.path
 import sys
-
+from glob import glob
 
 FOLDER_DOC = os.path.join("..", "..", "..", "TatooineMesher.wiki")
 

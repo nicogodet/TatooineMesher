@@ -20,27 +20,26 @@ Les variables écrites dans le fichier de sortie sont :
 Seulement les branches et les casiers actifs sont traités.
 """
 
-import numpy as np
-from numpy.lib.recfunctions import unstructured_to_structured
 import os.path
-from pyteltools.slf import Serafin
 import sys
 from time import perf_counter
-import triangle
 
+import numpy as np
+import triangle
 from crue10.emh.branche import Branche
 from crue10.emh.section import SectionProfil
 from crue10.etude import Etude
 from crue10.run.resultats_calcul import ResultatsCalcul
 from crue10.utils import ExceptionCrue10
+from numpy.lib.recfunctions import unstructured_to_structured
+from pyteltools.slf import Serafin
 
 from tatooinemesher.constraint_line import ConstraintLine
+from tatooinemesher.interp.raster import interp_raster
 from tatooinemesher.mesh_constructor import MeshConstructor
 from tatooinemesher.section import CrossSection, CrossSectionSequence
-from tatooinemesher.interp.raster import interp_raster
+from tatooinemesher.utils import TatooineException, logger, resample_2d_line, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
-from tatooinemesher.utils import logger, resample_2d_line, set_logger_level, TatooineException
-
 
 VARIABLES_FROM_GEOMETRY = ["B", "IS LIT ACTIVE", "W"]
 
