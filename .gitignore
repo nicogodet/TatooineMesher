@@ -23,3 +23,5 @@ Thumbs.db
 *.vrb
 
 TatooineMesher.egg-info/
+dist/
+build/

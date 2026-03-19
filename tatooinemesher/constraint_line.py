@@ -1,8 +1,13 @@
 import numpy as np
 import shapefile
-from pyteltools.geom import BlueKenue as bk
-from pyteltools.geom import Shapefile as shp
 from shapely.geometry import LineString
+
+try:
+    from pyteltools.geom import BlueKenue as bk
+    from pyteltools.geom import Shapefile as shp
+except ImportError:
+    bk = None
+    shp = None
 
 from tatooinemesher.interp.cubic_hermite_spline import CubicHermiteSpline
 from tatooinemesher.utils import TatooineException, float_vars
@@ -68,12 +73,22 @@ class ConstraintLine:
         lines = []
         if filename is not None:
             if filename.endswith(".i2s"):
+                if bk is None:
+                    raise ImportError(
+                        "PyTelTools is required for this feature. "
+                        "Install it with: pip install TatooineMesher[pyteltools]"
+                    )
                 with bk.Read(filename) as in_i2s:
                     in_i2s.read_header()
                     for i, line in enumerate(in_i2s.get_open_polylines()):
                         lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord))
 
             elif filename.endswith(".shp"):
+                if shp is None:
+                    raise ImportError(
+                        "PyTelTools is required for this feature. "
+                        "Install it with: pip install TatooineMesher[pyteltools]"
+                    )
                 if shp.get_shape_type(filename) not in (shapefile.POLYLINE, shapefile.POLYLINEZ, shapefile.POLYLINEM):
                     raise TatooineException("The type of file %s is not POLYLINEZ[M]" % filename)
                 for i, line in enumerate(shp.get_open_polylines(filename)):
