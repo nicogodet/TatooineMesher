@@ -3,10 +3,20 @@ from math import ceil, sqrt
 
 import numpy as np
 import shapefile
-from crue10.utils import logger as crue10_logger
-from pyteltools.geom import BlueKenue as bk
-from pyteltools.geom import Shapefile as shp
-from pyteltools.utils.log import set_logger_level as set_pyteltools_logger_level
+
+try:
+    from crue10.utils import logger as crue10_logger
+except ImportError:
+    crue10_logger = None
+
+try:
+    from pyteltools.geom import BlueKenue as bk
+    from pyteltools.geom import Shapefile as shp
+    from pyteltools.utils.log import set_logger_level as set_pyteltools_logger_level
+except ImportError:
+    bk = None
+    shp = None
+    set_pyteltools_logger_level = None
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -46,10 +56,18 @@ def get_hydraulic_axis(infile_axis):
     @return <shapely.geometry.LineString>: polyline representing the hydraulic axis
     """
     if infile_axis.endswith(".i2s"):
+        if bk is None:
+            raise ImportError(
+                "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
+            )
         with bk.Read(infile_axis) as in_i2s:
             in_i2s.read_header()
             lines = list(in_i2s.get_open_polylines())
     elif infile_axis.endswith(".shp"):
+        if shp is None:
+            raise ImportError(
+                "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
+            )
         if shp.get_shape_type(infile_axis) not in (shapefile.POLYLINE, shapefile.POLYLINEZ, shapefile.POLYLINEM):
             raise TatooineException(f"The type of file {infile_axis} is not POLYLINE[ZM]")
         lines = list(shp.get_open_polylines(infile_axis))
@@ -96,6 +114,10 @@ def resample_2d_line(coord, dist_max):
 
 
 def get_field_index(filename, field_id):
+    if shp is None:
+        raise ImportError(
+            "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
+        )
     if field_id is not None:
         names, _ = shp.get_attribute_names(filename)
         try:
@@ -107,8 +129,10 @@ def get_field_index(filename, field_id):
 def set_logger_level(set_to_debug):
     level = logging.DEBUG if set_to_debug else logging.INFO
     logger.setLevel(level)
-    crue10_logger.setLevel(level)
-    set_pyteltools_logger_level(level)
+    if crue10_logger is not None:
+        crue10_logger.setLevel(level)
+    if set_pyteltools_logger_level is not None:
+        set_pyteltools_logger_level(level)
 
 
 class TatooineException(Exception):
