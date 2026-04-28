@@ -18,6 +18,27 @@ parser.add_common_args(project_straight_line=True, constant_long_disc=True)
 parser.infile_args.add_argument("infile_axis", help="hydraulic axis file (*.shp, *.i2s)")
 parser.infile_args.add_argument("infile_cross_sections", help="cross-sections file (*.shp, *.i3s)")
 parser.infile_args.add_argument("--infile_constraint_lines", help="constraint lines file (*.shp, *.i2s)")
+parser.infile_args.add_argument(
+    "--infile_constraint_3D_lines",
+    help="constraint lines file with Z profile along each line, used to correct longitudinal Z "
+    "between cross-sections (POLYLINEZ *.shp only)",
+)
+parser.infile_args.add_argument(
+    "--z_line_strength",
+    type=float,
+    default=0.0,
+    help="weight in [0, 1] pulling the bathymetry toward the 3D constraint line values "
+    "between cross-sections (0 = shape only, default; 1 = match line at mid-distance). "
+    "Cross-section Z is preserved at the section locations regardless.",
+)
+parser.infile_args.add_argument(
+    "--z_line_gap_scale",
+    type=float,
+    default=0.0,
+    help="lateral falloff scale (m^-1) localizing the 3D-line correction when its Z diverges "
+    "sharply from the cross-section bathymetry. 0 = uniform linear blend across the bed (default). "
+    "Larger values keep the correction tight to the line where the Z gap is large.",
+)
 parser.infile_args.add_argument("--attr_cross_sections", help="attribute to identify cross-sections")
 # TODO: add groynes
 # parser_epis = parser.add_argument_group('Parameters to define lateral groynes (optional)')
@@ -42,6 +63,9 @@ if __name__ == "__main__":
             args.attr_cross_sections,
             args.long_step,
             infile_constraint_lines=args.infile_constraint_lines,
+            infile_constraint_3D_lines=args.infile_constraint_3D_lines,
+            z_line_strength=args.z_line_strength,
+            z_line_gap_scale=args.z_line_gap_scale,
             interp_constraint_lines=args.interp_constraint_lines,
             interp_values=args.interp_values,
             project_straight_line=args.project_straight_line,
