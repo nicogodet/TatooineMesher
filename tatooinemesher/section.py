@@ -6,9 +6,14 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 import numpy as np
 import shapefile
-from pyteltools.geom import BlueKenue as bk
-from pyteltools.geom import Shapefile as shp
 from shapely.geometry import LineString, MultiPoint, Point
+
+try:
+    from pyteltools.geom import BlueKenue as bk
+    from pyteltools.geom import Shapefile as shp
+except ImportError:
+    bk = None
+    shp = None
 
 from tatooinemesher.coord import Coord
 from tatooinemesher.utils import (
@@ -362,6 +367,10 @@ class CrossSectionSequence:
         section_seq = CrossSectionSequence()
 
         if filename.endswith(".i3s"):
+            if bk is None:
+                raise ImportError(
+                    "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
+                )
             with bk.Read(filename) as in_i3s:
                 in_i3s.read_header()
                 for i, line in enumerate(in_i3s.get_open_polylines()):
@@ -373,6 +382,10 @@ class CrossSectionSequence:
                     section_seq.add_section(section)
 
         elif filename.endswith(".shp"):
+            if shp is None:
+                raise ImportError(
+                    "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
+                )
             shp_type = shp.get_shape_type(filename)
             if shp_type in (shapefile.POLYLINEZ, shapefile.POLYLINEM):
                 field_id_index = get_field_index(filename, field_id)

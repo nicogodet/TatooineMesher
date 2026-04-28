@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
 \#*\#
 .\#*
 Thumbs.db
@@ -22,3 +23,6 @@ Thumbs.db
 *.toc
 *.vrb
 
+TatooineMesher.egg-info/
+dist/
+build/
