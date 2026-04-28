@@ -4,13 +4,13 @@ mesh_and_interpolate.py
 
 Channel mesher and/or interpolator from cross-sections
 """
+
 # TODO: integrate "seuils?" (local correction of the bathymetry)
 from time import perf_counter
 
 from tatooinemesher.algorithms.mesh_and_interpolate_alg import mesh_and_interpolate
+from tatooinemesher.utils import TatooineException, logger, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
-from tatooinemesher.utils import logger, set_logger_level, TatooineException
-
 
 parser = MyArgParse(description=__doc__)
 parser.add_common_args(project_straight_line=True, constant_long_disc=True)

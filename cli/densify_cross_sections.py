@@ -5,6 +5,7 @@ densify_cross_sections.py
 Interpolate initial and intermediate cross-sections
 Multiple variables are supported if input cross-sections file is a shapefile with POINTZ type.
 """
+
 from time import perf_counter
 
 from tatooinemesher.algorithms.densify_cross_sections_alg import densify_cross_sections

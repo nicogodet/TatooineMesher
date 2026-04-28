@@ -71,9 +71,7 @@ def densify_cross_sections(
     section_seq.sort_by_dist()
 
     if infile_constraint_lines is None:
-        constraint_lines = ConstraintLine.get_lines_and_set_limits_from_sections(
-            section_seq, interp_constraint_lines
-        )
+        constraint_lines = ConstraintLine.get_lines_and_set_limits_from_sections(section_seq, interp_constraint_lines)
     else:
         constraint_lines = ConstraintLine.get_lines_from_file(infile_constraint_lines, interp_constraint_lines)
         if nb_pts_lat is not None and len(constraint_lines) != 2:

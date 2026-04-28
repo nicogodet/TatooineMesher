@@ -10,7 +10,7 @@ from time import perf_counter
 from crue10.utils import ExceptionCrue10
 
 from tatooinemesher.algorithms.mesh_mascaret_run_alg import mesh_mascaret_run
-from tatooinemesher.utils import TatooineException, logger, set_logger_level
+from tatooinemesher.utils import logger, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
 
 parser = MyArgParse(description=__doc__)

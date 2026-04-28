@@ -1,7 +1,7 @@
 from tatooinemesher.constraint_line import ConstraintLine
 from tatooinemesher.mesh_constructor import MeshConstructor
-from tatooinemesher.section import CrossSection, CrossSectionSequence
-from tatooinemesher.utils import get_hydraulic_axis, logger, set_logger_level, TatooineException
+from tatooinemesher.section import CrossSectionSequence
+from tatooinemesher.utils import TatooineException, get_hydraulic_axis, logger, set_logger_level
 
 
 def mesh_and_interpolate(

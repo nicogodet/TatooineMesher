@@ -27,7 +27,7 @@ from crue10.emh.branche import Branche
 from crue10.utils import ExceptionCrue10
 
 from tatooinemesher.algorithms.mesh_crue10_run_alg import mesh_crue10_run
-from tatooinemesher.utils import TatooineException, logger, set_logger_level
+from tatooinemesher.utils import logger, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
 
 parser = MyArgParse(description=__doc__)
@@ -38,11 +38,11 @@ parser.infile_args.add_argument("infile_etu", help="Crue10 study file (*.etu.xml
 parser.infile_args.add_argument("model_name", help="model name")
 parser.infile_args.add_argument("--infile_rcal", help="Crue10 results file (*.rcal.xml)")
 parser.infile_args.add_argument(
-    "--calc_unsteady", help="name of the unsteady file " "(otherwise considers all steady calculations)"
+    "--calc_unsteady", help="name of the unsteady file (otherwise considers all steady calculations)"
 )
 parser.infile_args.add_argument(
     "--infile_dem",
-    help="Raster file (geoTIFF format) containing bottom elevation for " 'the "casiers" in the floodplain (*.tif)',
+    help='Raster file (geoTIFF format) containing bottom elevation for the "casiers" in the floodplain (*.tif)',
 )
 # Parameters to select branches
 parser_branches = parser.add_argument_group("Parameters to filter branches")
