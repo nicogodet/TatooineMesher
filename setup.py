@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
 from glob import glob
+
 from setuptools import find_packages, setup
 
 from tatooinemesher import VERSION
-
 
 EXCLUDE_FROM_PACKAGES = ["cli", "media"]
 

@@ -1,21 +1,22 @@
-from jinja2 import Environment, FileSystemLoader
 import math
-import numpy as np
-from numpy.lib.recfunctions import append_fields, rename_fields
 import os.path
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
+import time
+
+import numpy as np
+import shapefile
+import triangle
+from jinja2 import Environment, FileSystemLoader
+from numpy.lib.recfunctions import append_fields, rename_fields
+from pyteltools.geom import BlueKenue as bk
+from pyteltools.geom import Shapefile as shp
 from pyteltools.geom import geometry
 from pyteltools.slf import Serafin
 from pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
 from scipy import interpolate
-import shapefile
 from shapely.geometry import Point
-import time
-import triangle
 
 from tatooinemesher.section import Bed
-from tatooinemesher.utils import float_vars, logger, TatooineException
-
+from tatooinemesher.utils import TatooineException, float_vars, logger
 
 DIGITS = 4  # for csv and xml exports
 COURLIS_FLOAT_FMT = "%.6f"
@@ -61,7 +62,9 @@ class MeshConstructor:
     ]
     POINTS_FP_DTYPE = float_vars(["X", "Y", "Z"])
 
-    def __init__(self, section_seq=[], lat_step=None, nb_pts_lat=None, interp_values="LINEAR"):
+    def __init__(self, section_seq=None, lat_step=None, nb_pts_lat=None, interp_values="LINEAR"):
+        if section_seq is None:
+            section_seq = []
         self.section_seq = section_seq
         self.lat_step = lat_step
         self.nb_pts_lat = nb_pts_lat
@@ -73,7 +76,7 @@ class MeshConstructor:
 
         self.points = np.empty(0, dtype=MeshConstructor.POINTS_DTYPE)
         self.nodes_values = np.empty([0, 0, 0], dtype=float)
-        self.i_pt = int(-1)
+        self.i_pt = -1
         self.segments = np.empty([0, 2], dtype=int)
         self.triangle = {}  # filled by `build_mesh`
 
@@ -252,7 +255,7 @@ class MeshConstructor:
         logger.info("~> Building mesh per zone and then per bed")
 
         for i, (prev_section, next_section) in enumerate(zip(self.section_seq, self.section_seq[1:])):
-            logger.debug("> Zone n°{} : between {} and {}".format(i, prev_section, next_section))
+            logger.debug(f"> Zone n°{i} : between {prev_section} and {next_section}")
 
             if constant_long_disc:
                 nb_pts_inter = prev_section.compute_nb_pts_inter(next_section, long_step)
@@ -260,7 +263,7 @@ class MeshConstructor:
 
             # Looking for common limits between cross-sections
             common_limits_id = prev_section.common_limits(next_section.limits.keys())
-            logger.debug("Common limits: {}".format(list(common_limits_id)))
+            logger.debug(f"Common limits: {list(common_limits_id)}")
 
             if len(common_limits_id) < 2:
                 raise TatooineException(
@@ -275,7 +278,7 @@ class MeshConstructor:
                     pt_list_L1 = []
                     pt_list_L2 = []
 
-                    logger.debug("Bed {}-{}".format(id1, id2))
+                    logger.debug(f"Bed {id1}-{id2}")
 
                     # Extraction of cross-section portions (= beds)
                     bed_1 = prev_section.extract_bed(id1, id2)
@@ -288,9 +291,9 @@ class MeshConstructor:
                     dXp_L2 = Xp_profil2_L2 - Xp_profil1_L2
 
                     if dXp_L1 < 0:
-                        raise TatooineException("The constraint line {} is not oriented correctly".format(id1))
+                        raise TatooineException(f"The constraint line {id1} is not oriented correctly")
                     if dXp_L2 < 0:
-                        raise TatooineException("The constraint line {} is not oriented correctly".format(id2))
+                        raise TatooineException(f"The constraint line {id2} is not oriented correctly")
 
                     if not constant_long_disc:
                         nb_pts_inter = math.ceil(min(dXp_L1, dXp_L2) / long_step) - 1
@@ -402,7 +405,7 @@ class MeshConstructor:
             nnode, nelem = len(self.triangle["vertices"]), len(self.triangle["triangles"])
         except KeyError:
             raise TatooineException("The generation of the mesh failed!")
-        return "Mesh with {} nodes and {} elements".format(nnode, nelem)
+        return f"Mesh with {nnode} nodes and {nelem} elements"
 
     def export_points(self, path):
         if path.endswith(".xyz"):
@@ -413,7 +416,7 @@ class MeshConstructor:
                     fileout,
                     np.vstack((self.points["X"], self.points["Y"], z_array)).T,
                     delimiter=" ",
-                    fmt="%.{}f".format(DIGITS),
+                    fmt=f"%.{DIGITS}f",
                 )
 
         elif path.endswith(".shp"):
@@ -458,7 +461,7 @@ class MeshConstructor:
             raise TatooineException("Only the shp format is supported for segments")
 
     def export_sections(self, path):
-        """
+        r"""
         Export generated profiles in a shp, i3s or georefC file
         /!\ Not relevant if constant_long_disc is False
         TODO: Use class MascaretGeoFile
@@ -480,13 +483,17 @@ class MeshConstructor:
 
                     for i, row in enumerate(points):
                         if i == 0:
-                            positions_str = " %f %f %f %f" % (row["X"], row["Y"], points[-1]["X"], points[-1]["Y"])
-                            positions_str += " AXE %f %f" % (row["X"], row["Y"])  # FIXME: not the axis position...
-                            out_geo.write("Profil Bief_0 %s %f%s\n" % ("P" + str(dist), dist, positions_str))
+                            positions_str = " {:f} {:f} {:f} {:f}".format(
+                                row["X"], row["Y"], points[-1]["X"], points[-1]["Y"]
+                            )
+                            positions_str += " AXE {:f} {:f}".format(
+                                row["X"], row["Y"]
+                            )  # FIXME: not the axis position...
+                            out_geo.write("Profil Bief_0 {} {:f}{}\n".format("P" + str(dist), dist, positions_str))
 
                         layers_str = " " + " ".join([COURLIS_FLOAT_FMT % x for x in values[:, pos][:, i]])
 
-                        out_geo.write("%f%s B %f %f\n" % (row["Xt"], layers_str, row["X"], row["Y"]))
+                        out_geo.write("{:f}{} B {:f} {:f}\n".format(row["Xt"], layers_str, row["X"], row["Y"]))
             return
 
         lines = []
@@ -499,15 +506,14 @@ class MeshConstructor:
         if path.endswith(".i3s"):
             with bk.Write(path) as out_i3s:
                 out_i3s.write_header()
-                out_i3s.write_lines(lines, [l.attributes()[0] for l in lines])
+                out_i3s.write_lines(lines, [line.attributes()[0] for line in lines])
 
         elif path.endswith(".shp"):
             shp.write_shp_lines(path, shapefile.POLYLINEZ, lines, "Z")
 
         else:
             raise NotImplementedError(
-                "Only the shp (POLYLINEZ), i3s and georefC formats are supported for "
-                "the generated cross-sections file"
+                "Only the shp (POLYLINEZ), i3s and georefC formats are supported for the generated cross-sections file"
             )
 
     def export_mesh(self, path, lang="en"):
@@ -523,7 +529,7 @@ class MeshConstructor:
                 # Write header
                 date = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
                 fileout.write(
-                    """#########################################################################
+                    f"""#########################################################################
 :FileType t3s  ASCII  EnSim 1.0
 # Canadian Hydraulics Centre/National Research Council (c) 1998-2012
 # DataType                 2D T3 Scalar Mesh
@@ -531,18 +537,16 @@ class MeshConstructor:
 :Application              BlueKenue
 :Version                  3.3.4
 :WrittenBy                TatooineMesher
-:CreationDate             {}
+:CreationDate             {date}
 #
 #------------------------------------------------------------------------
 #
-:NodeCount {}
-:ElementCount {}
+:NodeCount {nnode}
+:ElementCount {nelem}
 :ElementType  T3
 #
 :EndHeader
-""".format(
-                        date, nnode, nelem
-                    )
+"""
                 )
 
             with open(path, mode="ab") as fileout:
@@ -551,7 +555,7 @@ class MeshConstructor:
                     fileout,
                     np.column_stack((self.triangle["vertices"], self.interp_values_from_geom()[0, :])),
                     delimiter=" ",
-                    fmt="%.{}f".format(DIGITS),
+                    fmt=f"%.{DIGITS}f",
                 )
 
                 # Table with elements (connectivity)
@@ -574,10 +578,9 @@ class MeshConstructor:
                 fileout.write(template_render)
 
         elif path.endswith(".slf"):
-
             with Serafin.Write(path, lang, overwrite=True) as resout:
                 output_header = Serafin.SerafinHeader(
-                    title="%s (Written by TatooineMesher)" % os.path.basename(path), lang=lang
+                    title=f"{os.path.basename(path)} (Written by TatooineMesher)", lang=lang
                 )
                 output_header.from_triangulation(self.triangle["vertices"], self.triangle["triangles"] + 1)
 
