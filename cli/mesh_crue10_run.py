@@ -20,27 +20,26 @@ Les variables écrites dans le fichier de sortie sont :
 Seulement les branches et les casiers actifs sont traités.
 """
 
-import numpy as np
-from numpy.lib.recfunctions import unstructured_to_structured
 import os.path
-from pyteltools.slf import Serafin
 import sys
 from time import perf_counter
-import triangle
 
+import numpy as np
+import triangle
 from crue10.emh.branche import Branche
 from crue10.emh.section import SectionProfil
 from crue10.etude import Etude
 from crue10.run.resultats_calcul import ResultatsCalcul
 from crue10.utils import ExceptionCrue10
+from numpy.lib.recfunctions import unstructured_to_structured
+from pyteltools.slf import Serafin
 
 from tatooinemesher.constraint_line import ConstraintLine
+from tatooinemesher.interp.raster import interp_raster
 from tatooinemesher.mesh_constructor import MeshConstructor
 from tatooinemesher.section import CrossSection, CrossSectionSequence
-from tatooinemesher.interp.raster import interp_raster
+from tatooinemesher.utils import TatooineException, logger, resample_2d_line, set_logger_level
 from tatooinemesher.utils.arg_command_line import MyArgParse
-from tatooinemesher.utils import logger, resample_2d_line, set_logger_level, TatooineException
-
 
 VARIABLES_FROM_GEOMETRY = ["B", "IS LIT ACTIVE", "W"]
 
@@ -79,7 +78,7 @@ def mesh_crue10_run(args):
             ignore = True
 
         if not ignore:
-            logger.info("===== TRAITEMENT DE LA BRANCHE %s =====" % branche.id)
+            logger.info(f"===== TRAITEMENT DE LA BRANCHE {branche.id} =====")
             axe = branche.geom
             try:
                 section_seq = CrossSectionSequence()
@@ -129,7 +128,7 @@ def mesh_crue10_run(args):
         logger.info("===== TRAITEMENT DES CASIERS =====")
 
         if not os.path.exists(args.infile_dem):
-            raise TatooineException("File not found: %s" % args.infile_dem)
+            raise TatooineException(f"File not found: {args.infile_dem}")
         from osgeo.gdal import Open
 
         raster = Open(args.infile_dem)
@@ -142,7 +141,7 @@ def mesh_crue10_run(args):
         for i, casier in enumerate(modele.get_liste_casiers()):
             if casier.is_active:
                 if casier.geom is None:
-                    raise TatooineException("Geometry of %s could not be found" % casier)
+                    raise TatooineException(f"Geometry of {casier} could not be found")
                 line = casier.geom.simplify(simplify_dist)
                 if not line.is_closed:
                     raise RuntimeError
@@ -156,7 +155,7 @@ def mesh_crue10_run(args):
                     "vertices": np.array(np.column_stack((hard_nodes_xy[:, 0], hard_nodes_xy[:, 1]))),
                     "segments": hard_segments,
                 }
-                triangulation = triangle.triangulate(tri, opts="qpa%f" % max_elem_area)
+                triangulation = triangle.triangulate(tri, opts=f"qpa{max_elem_area:f}")
 
                 nodes_xy = np.array(triangulation["vertices"], dtype=float)
                 bottom = dem_interp(nodes_xy)
@@ -180,12 +179,12 @@ def mesh_crue10_run(args):
         missing_sections = modele.get_missing_active_sections(resultats.emh["Section"])
         if missing_sections:
             raise ExceptionCrue10(
-                "Sections actives dans le scénario mais manquantes dans le Run :\n%s" % missing_sections
+                f"Sections actives dans le scénario mais manquantes dans le Run :\n{missing_sections}"
             )
 
         # Subset results to get requested variables at active sections
         varnames_1d = resultats.variables["Section"]
-        logger.info("Variables 1D disponibles aux sections: %s" % varnames_1d)
+        logger.info(f"Variables 1D disponibles aux sections: {varnames_1d}")
         try:
             pos_z = varnames_1d.index("Z")
         except ValueError:
@@ -219,7 +218,7 @@ def mesh_crue10_run(args):
         values_geom = global_mesh_constr.interp_values_from_geom()
         z_bottom = values_geom[0, :]
         with Serafin.Write(args.outfile_mesh, args.lang, overwrite=True) as resout:
-            title = "%s (written by TatooineMesher)" % os.path.basename(args.outfile_mesh)
+            title = f"{os.path.basename(args.outfile_mesh)} (written by TatooineMesher)"
             output_header = Serafin.SerafinHeader(title=title, lang=args.lang)
             output_header.from_triangulation(
                 global_mesh_constr.triangle["vertices"], global_mesh_constr.triangle["triangles"] + 1
@@ -237,7 +236,7 @@ def mesh_crue10_run(args):
 
             if args.calc_unsteady is None:
                 for i, calc_name in enumerate(resultats.res_calc_pseudoperm.keys()):
-                    logger.info("~> Calcul permanent %s" % calc_name)
+                    logger.info(f"~> Calcul permanent {calc_name}")
                     # Read a single *steady* calculation
                     res_steady = resultats.get_data_pseudoperm(calc_name)
                     variables_at_profiles = res_steady["Section"][pos_sections_list, :][:, pos_variables]
@@ -264,11 +263,11 @@ def mesh_crue10_run(args):
 
             else:
                 calc_unsteady = resultats.get_res_calc_trans(args.calc_unsteady)
-                logger.info("Calcul transitoire %s" % args.calc_unsteady)
+                logger.info(f"Calcul transitoire {args.calc_unsteady}")
                 res_unsteady = resultats.get_data_trans(args.calc_unsteady)
 
                 for i, (time, _) in enumerate(calc_unsteady.frame_list):
-                    logger.info("~> %fs" % time)
+                    logger.info(f"~> {time:f}s")
                     res_at_sections = res_unsteady["Section"][i, :, :]
                     variables_at_profiles = res_at_sections[pos_sections_list, :][:, pos_variables]
                     if global_mesh_constr.has_floodplain:
@@ -297,7 +296,7 @@ def mesh_crue10_run(args):
         global_mesh_constr.export_mesh(args.outfile_mesh, lang=args.lang)
 
     t2 = perf_counter()
-    logger.info("=> Execution time: {}s".format(t2 - t1))
+    logger.info(f"=> Execution time: {t2 - t1}s")
 
 
 parser = MyArgParse(description=__doc__)
@@ -308,11 +307,11 @@ parser.infile_args.add_argument("infile_etu", help="Crue10 study file (*.etu.xml
 parser.infile_args.add_argument("model_name", help="model name")
 parser.infile_args.add_argument("--infile_rcal", help="Crue10 results file (*.rcal.xml)")
 parser.infile_args.add_argument(
-    "--calc_unsteady", help="name of the unsteady file " "(otherwise considers all steady calculations)"
+    "--calc_unsteady", help="name of the unsteady file (otherwise considers all steady calculations)"
 )
 parser.infile_args.add_argument(
     "--infile_dem",
-    help="Raster file (geoTIFF format) containing bottom elevation for " 'the "casiers" in the floodplain (*.tif)',
+    help='Raster file (geoTIFF format) containing bottom elevation for the "casiers" in the floodplain (*.tif)',
 )
 # Parameters to select branches
 parser_branches = parser.add_argument_group("Parameters to filter branches")
