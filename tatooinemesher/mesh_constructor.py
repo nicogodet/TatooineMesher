@@ -1,21 +1,22 @@
-from jinja2 import Environment, FileSystemLoader
 import math
-import numpy as np
-from numpy.lib.recfunctions import append_fields, rename_fields
 import os.path
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
-from pyteltools.geom import geometry
-from pyteltools.slf import Serafin
-from pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
-from scipy import interpolate
-import shapefile
-from shapely.geometry import Point
 import time
+
+import numpy as np
+import shapefile
 import triangle
+from jinja2 import Environment, FileSystemLoader
+from numpy.lib.recfunctions import append_fields, rename_fields
+from scipy import interpolate
+from shapely.geometry import Point
 
+from tatooinemesher._external.pyteltools.geom import BlueKenue as bk
+from tatooinemesher._external.pyteltools.geom import Shapefile as shp
+from tatooinemesher._external.pyteltools.geom import geometry
+from tatooinemesher._external.pyteltools.slf import Serafin
+from tatooinemesher._external.pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
 from tatooinemesher.section import Bed
-from tatooinemesher.utils import float_vars, logger, TatooineException
-
+from tatooinemesher.utils import TatooineException, float_vars, logger
 
 DIGITS = 4  # for csv and xml exports
 COURLIS_FLOAT_FMT = "%.6f"
@@ -56,16 +57,28 @@ class MeshConstructor:
     - get_merge_triangulation
     """
 
-    POINTS_DTYPE = float_vars(["X", "Y", "xt", "Xt_upstream", "Xt_downstream", "Xl", "xl"]) + [
+    POINTS_DTYPE = float_vars(["X", "Y", "xt", "Xt_upstream", "Xt_downstream", "Xl", "xl", "z_correction"]) + [
         (var, int) for var in ("zone", "bed")
     ]
     POINTS_FP_DTYPE = float_vars(["X", "Y", "Z"])
 
-    def __init__(self, section_seq=[], lat_step=None, nb_pts_lat=None, interp_values="LINEAR"):
+    def __init__(
+        self,
+        section_seq=None,
+        lat_step=None,
+        nb_pts_lat=None,
+        interp_values="LINEAR",
+        z_line_strength=0.0,
+        z_line_gap_scale=0.0,
+    ):
+        if section_seq is None:
+            section_seq = []
         self.section_seq = section_seq
         self.lat_step = lat_step
         self.nb_pts_lat = nb_pts_lat
         self.interp_values = interp_values
+        self.z_line_strength = z_line_strength
+        self.z_line_gap_scale = z_line_gap_scale
         if self.section_seq:
             self.nb_var = self.section_seq[0].coord.nb_var()
         else:
@@ -73,7 +86,7 @@ class MeshConstructor:
 
         self.points = np.empty(0, dtype=MeshConstructor.POINTS_DTYPE)
         self.nodes_values = np.empty([0, 0, 0], dtype=float)
-        self.i_pt = int(-1)
+        self.i_pt = -1
         self.segments = np.empty([0, 2], dtype=int)
         self.triangle = {}  # filled by `build_mesh`
 
@@ -95,10 +108,12 @@ class MeshConstructor:
     def var_names(self):
         return list(self.section_seq[0].coord.values.dtype.names)
 
-    def add_points(self, coord, zone_index, xl, bed_index):
+    def add_points(self, coord, zone_index, xl, bed_index, z_corrections=None):
         """!
         @brief: Add vertices/nodes
         @param coord <2D-array float>: table with columns 'X', 'Y', 'Xt_upstream' and 'Xt_downstream'
+        @param z_corrections <1D-array float | None>: optional Z correction from 3D constraint lines
+            (same length as coord); defaults to 0 for every node when None
         """
         if self.casiers_nodes_idx:
             raise TatooineException("Impossible to add points in river bed after having considered the floodplain")
@@ -113,6 +128,10 @@ class MeshConstructor:
             self.section_seq[zone_index].dist_proj_axe * (1 - xl) + self.section_seq[zone_index + 1].dist_proj_axe * xl
         )
         new_coord["xl"] = xl
+        if z_corrections is None:
+            new_coord["z_correction"] = 0.0
+        else:
+            new_coord["z_correction"] = z_corrections
         self.i_pt += len(new_coord)
         self.points = np.hstack((self.points, new_coord))
 
@@ -237,6 +256,34 @@ class MeshConstructor:
                 if first_bed:
                     first_bed = False
 
+    @staticmethod
+    def _compute_line_z_correction(line, Xp_us, Xp_ds, sampled, Xp_adm_list, z_sec_us, z_sec_ds, strength):
+        """
+        Compute the Z correction applied at the boundary of a bed (along a constraint line).
+        Sum of two terms:
+        - shape deviation: Z_line(xl) - Z_line_lin(xl), preserves cross-section Z at xl=0,1.
+        - pull toward line (when strength > 0): α(xl) * [Z_line_lin(xl) - Z_sec_lin(xl)]
+          where α(xl) = strength * 4 * xl * (1 - xl). At xl=0,1 the pull vanishes;
+          at xl=0.5 with strength=1 the boundary node reaches Z_line exactly.
+        Returns (correction, gap) — the correction values and the longitudinal gap
+        Z_line_lin - Z_sec_lin at each Xp_adm position (used to localize lateral propagation).
+        Both arrays are zero for a 2D line (no Z info).
+        """
+        n = len(Xp_adm_list)
+        if not getattr(line, "has_z", False):
+            return np.zeros(n), np.zeros(n)
+        endpoints = line.interp(np.array([Xp_us, Xp_ds]))
+        z_line_us, z_line_ds = endpoints["Z"][0], endpoints["Z"][1]
+        z_line_lin = z_line_us * (1.0 - Xp_adm_list) + z_line_ds * Xp_adm_list
+        z_sec_lin = z_sec_us * (1.0 - Xp_adm_list) + z_sec_ds * Xp_adm_list
+        gap = z_line_lin - z_sec_lin
+        deviation = sampled["Z"] - z_line_lin
+        if strength == 0.0:
+            return deviation, gap
+        alpha = strength * 4.0 * Xp_adm_list * (1.0 - Xp_adm_list)
+        pull = alpha * gap
+        return deviation + pull, gap
+
     def build_interp(self, constraint_lines, long_step, constant_long_disc):
         """
         Build interpolation, add points and segments
@@ -252,7 +299,7 @@ class MeshConstructor:
         logger.info("~> Building mesh per zone and then per bed")
 
         for i, (prev_section, next_section) in enumerate(zip(self.section_seq, self.section_seq[1:])):
-            logger.debug("> Zone n°{} : between {} and {}".format(i, prev_section, next_section))
+            logger.debug(f"> Zone n°{i} : between {prev_section} and {next_section}")
 
             if constant_long_disc:
                 nb_pts_inter = prev_section.compute_nb_pts_inter(next_section, long_step)
@@ -260,7 +307,7 @@ class MeshConstructor:
 
             # Looking for common limits between cross-sections
             common_limits_id = prev_section.common_limits(next_section.limits.keys())
-            logger.debug("Common limits: {}".format(list(common_limits_id)))
+            logger.debug(f"Common limits: {list(common_limits_id)}")
 
             if len(common_limits_id) < 2:
                 raise TatooineException(
@@ -275,7 +322,7 @@ class MeshConstructor:
                     pt_list_L1 = []
                     pt_list_L2 = []
 
-                    logger.debug("Bed {}-{}".format(id1, id2))
+                    logger.debug(f"Bed {id1}-{id2}")
 
                     # Extraction of cross-section portions (= beds)
                     bed_1 = prev_section.extract_bed(id1, id2)
@@ -288,9 +335,9 @@ class MeshConstructor:
                     dXp_L2 = Xp_profil2_L2 - Xp_profil1_L2
 
                     if dXp_L1 < 0:
-                        raise TatooineException("The constraint line {} is not oriented correctly".format(id1))
+                        raise TatooineException(f"The constraint line {id1} is not oriented correctly")
                     if dXp_L2 < 0:
-                        raise TatooineException("The constraint line {} is not oriented correctly".format(id2))
+                        raise TatooineException(f"The constraint line {id2} is not oriented correctly")
 
                     if not constant_long_disc:
                         nb_pts_inter = math.ceil(min(dXp_L1, dXp_L2) / long_step) - 1
@@ -303,11 +350,58 @@ class MeshConstructor:
                         Xp_profil1_L2, Xp_profil2_L2, Xp_adm_list
                     )
 
+                    # Cross-section Z at the L1/L2 intersection points (needed for the pull term).
+                    var_z = self.var_names()[0] if self.nb_var > 0 else None
+                    z_sec_us_L1 = z_sec_ds_L1 = z_sec_us_L2 = z_sec_ds_L2 = 0.0
+                    if var_z is not None and (constraint_lines[id1].has_z or constraint_lines[id2].has_z):
+                        z_sec_us_L1 = np.interp(
+                            prev_section.get_limit_by_id(id1)["Xt_section"],
+                            prev_section.coord.array["Xt"],
+                            prev_section.coord.values[var_z],
+                        )
+                        z_sec_ds_L1 = np.interp(
+                            next_section.get_limit_by_id(id1)["Xt_section"],
+                            next_section.coord.array["Xt"],
+                            next_section.coord.values[var_z],
+                        )
+                        z_sec_us_L2 = np.interp(
+                            prev_section.get_limit_by_id(id2)["Xt_section"],
+                            prev_section.coord.array["Xt"],
+                            prev_section.coord.values[var_z],
+                        )
+                        z_sec_ds_L2 = np.interp(
+                            next_section.get_limit_by_id(id2)["Xt_section"],
+                            next_section.coord.array["Xt"],
+                            next_section.coord.values[var_z],
+                        )
+
+                    # Z correction along each constraint line (between cross-sections). Zero when line is 2D.
+                    L1_z_dev, L1_gap = self._compute_line_z_correction(
+                        constraint_lines[id1],
+                        Xp_profil1_L1,
+                        Xp_profil2_L1,
+                        L1_coord_int,
+                        Xp_adm_list,
+                        z_sec_us_L1,
+                        z_sec_ds_L1,
+                        self.z_line_strength,
+                    )
+                    L2_z_dev, L2_gap = self._compute_line_z_correction(
+                        constraint_lines[id2],
+                        Xp_profil1_L2,
+                        Xp_profil2_L2,
+                        L2_coord_int,
+                        Xp_adm_list,
+                        z_sec_us_L2,
+                        z_sec_ds_L2,
+                        self.z_line_strength,
+                    )
+
                     # LOOP ON INTERMEDIATE CROSS-SECTIONS
                     for k in range(nb_pts_inter):
                         Xp = Xp_adm_list[k]
-                        P1 = Point(tuple(L1_coord_int[k]))
-                        P2 = Point(tuple(L2_coord_int[k]))
+                        P1 = Point(L1_coord_int[k]["X"], L1_coord_int[k]["Y"])
+                        P2 = Point(L2_coord_int[k]["X"], L2_coord_int[k]["Y"])
 
                         if self.nb_pts_lat is None:
                             nb_pts_lat = math.ceil(P1.distance(P2) / self.lat_step) + 1
@@ -319,11 +413,21 @@ class MeshConstructor:
                         coord_int = bed_int.array[["X", "Y", "xt", "Xt_upstream", "Xt_downstream"]]  # Ignore `Xt`
                         pt_list_L1.append(self.i_pt + 1)
 
+                        # Spread the Z correction laterally through the bed.
+                        # Default: linear blend (1 − xt)·L1 + xt·L2. With z_line_gap_scale > 0 the
+                        # exponents grow with the local Z gap, localizing the correction near a line
+                        # whose Z value diverges sharply from the cross-section bathymetry.
+                        xt_arr = coord_int["xt"]
+                        p_L1 = 1.0 + self.z_line_gap_scale * abs(L1_gap[k])
+                        p_L2 = 1.0 + self.z_line_gap_scale * abs(L2_gap[k])
+                        z_corr = (1.0 - xt_arr) ** p_L1 * L1_z_dev[k] + xt_arr**p_L2 * L2_z_dev[k]
+
                         if not first_bed:
                             # ignore first point because the constraint line was already considered
                             coord_int = coord_int[1:]
+                            z_corr = z_corr[1:]
 
-                        self.add_points(coord_int, i, Xp, j)
+                        self.add_points(coord_int, i, Xp, j, z_corrections=z_corr)
 
                         pt_list_L2.append(self.i_pt)
 
@@ -402,7 +506,7 @@ class MeshConstructor:
             nnode, nelem = len(self.triangle["vertices"]), len(self.triangle["triangles"])
         except KeyError:
             raise TatooineException("The generation of the mesh failed!")
-        return "Mesh with {} nodes and {} elements".format(nnode, nelem)
+        return f"Mesh with {nnode} nodes and {nelem} elements"
 
     def export_points(self, path):
         if path.endswith(".xyz"):
@@ -413,7 +517,7 @@ class MeshConstructor:
                     fileout,
                     np.vstack((self.points["X"], self.points["Y"], z_array)).T,
                     delimiter=" ",
-                    fmt="%.{}f".format(DIGITS),
+                    fmt=f"%.{DIGITS}f",
                 )
 
         elif path.endswith(".shp"):
@@ -458,7 +562,7 @@ class MeshConstructor:
             raise TatooineException("Only the shp format is supported for segments")
 
     def export_sections(self, path):
-        """
+        r"""
         Export generated profiles in a shp, i3s or georefC file
         /!\ Not relevant if constant_long_disc is False
         TODO: Use class MascaretGeoFile
@@ -480,13 +584,17 @@ class MeshConstructor:
 
                     for i, row in enumerate(points):
                         if i == 0:
-                            positions_str = " %f %f %f %f" % (row["X"], row["Y"], points[-1]["X"], points[-1]["Y"])
-                            positions_str += " AXE %f %f" % (row["X"], row["Y"])  # FIXME: not the axis position...
-                            out_geo.write("Profil Bief_0 %s %f%s\n" % ("P" + str(dist), dist, positions_str))
+                            positions_str = " {:f} {:f} {:f} {:f}".format(
+                                row["X"], row["Y"], points[-1]["X"], points[-1]["Y"]
+                            )
+                            positions_str += " AXE {:f} {:f}".format(
+                                row["X"], row["Y"]
+                            )  # FIXME: not the axis position...
+                            out_geo.write("Profil Bief_0 {} {:f}{}\n".format("P" + str(dist), dist, positions_str))
 
                         layers_str = " " + " ".join([COURLIS_FLOAT_FMT % x for x in values[:, pos][:, i]])
 
-                        out_geo.write("%f%s B %f %f\n" % (row["Xt"], layers_str, row["X"], row["Y"]))
+                        out_geo.write("{:f}{} B {:f} {:f}\n".format(row["Xt"], layers_str, row["X"], row["Y"]))
             return
 
         lines = []
@@ -499,15 +607,14 @@ class MeshConstructor:
         if path.endswith(".i3s"):
             with bk.Write(path) as out_i3s:
                 out_i3s.write_header()
-                out_i3s.write_lines(lines, [l.attributes()[0] for l in lines])
+                out_i3s.write_lines(lines, [line.attributes()[0] for line in lines])
 
         elif path.endswith(".shp"):
             shp.write_shp_lines(path, shapefile.POLYLINEZ, lines, "Z")
 
         else:
             raise NotImplementedError(
-                "Only the shp (POLYLINEZ), i3s and georefC formats are supported for "
-                "the generated cross-sections file"
+                "Only the shp (POLYLINEZ), i3s and georefC formats are supported for the generated cross-sections file"
             )
 
     def export_mesh(self, path, lang="en"):
@@ -523,7 +630,7 @@ class MeshConstructor:
                 # Write header
                 date = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
                 fileout.write(
-                    """#########################################################################
+                    f"""#########################################################################
 :FileType t3s  ASCII  EnSim 1.0
 # Canadian Hydraulics Centre/National Research Council (c) 1998-2012
 # DataType                 2D T3 Scalar Mesh
@@ -531,18 +638,22 @@ class MeshConstructor:
 :Application              BlueKenue
 :Version                  3.3.4
 :WrittenBy                TatooineMesher
-:CreationDate             {}
+:CreationDate             {date}
 #
 #------------------------------------------------------------------------
 #
-:NodeCount {}
-:ElementCount {}
+:NoDataValue -999
+:AttributeCount 1
+:AttributeName 1 Value
+:AttributeUnits 1 m
+:AttributeType 1 double
+#
+:NodeCount {nnode}
+:ElementCount {nelem}
 :ElementType  T3
 #
 :EndHeader
-""".format(
-                        date, nnode, nelem
-                    )
+"""
                 )
 
             with open(path, mode="ab") as fileout:
@@ -551,7 +662,7 @@ class MeshConstructor:
                     fileout,
                     np.column_stack((self.triangle["vertices"], self.interp_values_from_geom()[0, :])),
                     delimiter=" ",
-                    fmt="%.{}f".format(DIGITS),
+                    fmt=f"%.{DIGITS}f",
                 )
 
                 # Table with elements (connectivity)
@@ -574,10 +685,9 @@ class MeshConstructor:
                 fileout.write(template_render)
 
         elif path.endswith(".slf"):
-
             with Serafin.Write(path, lang, overwrite=True) as resout:
                 output_header = Serafin.SerafinHeader(
-                    title="%s (Written by TatooineMesher)" % os.path.basename(path), lang=lang
+                    title=f"{os.path.basename(path)} (Written by TatooineMesher)", lang=lang
                 )
                 output_header.from_triangulation(self.triangle["vertices"], self.triangle["triangles"] + 1)
 
@@ -645,6 +755,11 @@ class MeshConstructor:
                     new_values_us * (1 - self.points["xl"][filter_points])
                     + new_values_ds * self.points["xl"][filter_points]
                 )
+
+        # 3D constraint lines: add Z correction on boundary nodes (deviation from linear profile)
+        # Applied only to the first variable (Z / elevation).
+        if self.nb_var > 0:
+            new_values[0, :] += self.points["z_correction"]
         return new_values
 
     def interp_2d_values_from_profiles(self):

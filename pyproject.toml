@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "TatooineMesher"
+dynamic = ["version"]
+description = "Interpolate and/or mesh rivers from cross-sections profiles (and constraint lines)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE.txt"}
+authors = [
+    {name = "Luc Duron", email = "l.duron@cnr.tm.fr"},
+]
+
+dependencies = [
+    "jinja2",
+    "matplotlib",
+    "numpy",
+    "pyshp>=2.0",
+    "scipy",
+    "shapely",
+    "triangle",
+]
+
+[project.optional-dependencies]
+crue10 = [
+    "Crue10_tools @ git+https://github.com/CNR-Engineering/Crue10_tools.git@4.0",
+]
+gdal = [
+    "gdal",
+]
+all = [
+    "TatooineMesher[crue10,gdal]",
+]
+
+[project.urls]
+Homepage = "https://github.com/CNR-Engineering/TatooineMesher"
+
+[tool.setuptools.packages.find]
+include = ["tatooinemesher*"]
+exclude = ["cli*", "tests*"]
+
+[tool.setuptools.package-data]
+"tatooinemesher.data" = ["*.xml"]
+"tatooinemesher._external.pyteltools.slf.data" = ["*.csv"]
+
+[tool.setuptools.dynamic]
+version = {attr = "tatooinemesher.VERSION"}
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+extend-exclude = ["tatooinemesher/_external"]
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+]
+ignore = [
+    "E501",  # line-too-long: laissé au formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # re-exports
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

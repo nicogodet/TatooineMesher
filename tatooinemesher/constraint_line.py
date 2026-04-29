@@ -1,10 +1,11 @@
 import numpy as np
-from pyteltools.geom import BlueKenue as bk, Shapefile as shp
 import shapefile
 from shapely.geometry import LineString
 
+from tatooinemesher._external.pyteltools.geom import BlueKenue as bk
+from tatooinemesher._external.pyteltools.geom import Shapefile as shp
 from tatooinemesher.interp.cubic_hermite_spline import CubicHermiteSpline
-from tatooinemesher.utils import float_vars, TatooineException
+from tatooinemesher.utils import TatooineException, float_vars
 
 
 class ConstraintLine:
@@ -15,8 +16,10 @@ class ConstraintLine:
     - id <integer>:  unique identifier (automatic numbering starting from 0)
     - nb_points <int>: number of points
     - coord <2D-array float>: coordinates (X and Y)
+    - Z <1D-array float | None>: elevation along the line (None when has_z is False)
+    - has_z <bool>: True when an independent Z profile is attached to the line
     - geom <shapely.geometry.LineString>: 2D geometry
-    - interp: coordinates interpolator
+    - interp: coordinates (and optionally Z) interpolator
 
     ### Methods
     - get_lines_from_file
@@ -25,55 +28,81 @@ class ConstraintLine:
     - build_interp_chs
     - coord_sampling_along_line
     """
-    def __init__(self, id, coord, interp_coord='LINEAR'):
+
+    def __init__(self, id, coord, interp_coord="LINEAR", has_z=False):
         """
-        Create a ConstraintLine instance from X and Y coordinates
+        Create a ConstraintLine instance from X and Y coordinates (and optionally Z)
         @id <integer>: unique identifier (automatic numbering starting from 0)
-        @coord <Coord>: coordinates (X and Y)
-            Ex: [(x1, y1), (x2, y2), ..., (xn, yn)]
+        @coord: coordinates; 2D tuples (x, y) or 3D tuples (x, y, z) when has_z is True
         @interp_coord <str>: coordinates interpolation method (among: 'LINEAR', 'CARDINAL' and 'FINITE_DIFF')
+        @has_z <bool>: if True, coord must provide a Z value that is interpolated along the line
         """
         self.id = id
         self.nb_points = len(coord)
-        self.coord = np.array(coord)
-        Xt = np.sqrt(np.power(np.ediff1d(self.coord[:, 0], to_begin=0.), 2) +
-                     np.power(np.ediff1d(self.coord[:, 1], to_begin=0.), 2))
+        self.has_z = has_z
+        coord_arr = np.asarray(coord, dtype=float)
+        if has_z:
+            if coord_arr.ndim != 2 or coord_arr.shape[1] < 3:
+                raise TatooineException(
+                    "ConstraintLine #%s: 3D coordinates (x, y, z) are required when has_z=True" % id
+                )
+            self.Z = coord_arr[:, 2].copy()
+            self.coord = coord_arr[:, :2].copy()
+        else:
+            self.Z = None
+            self.coord = coord_arr[:, :2].copy() if coord_arr.ndim == 2 else coord_arr
+        Xt = np.sqrt(
+            np.power(np.ediff1d(self.coord[:, 0], to_begin=0.0), 2)
+            + np.power(np.ediff1d(self.coord[:, 1], to_begin=0.0), 2)
+        )
         self.Xt = Xt.cumsum()
-        self.geom = LineString(coord)
+        self.geom = LineString(self.coord)
 
-        if interp_coord == 'LINEAR':
+        if interp_coord == "LINEAR":
             self.interp = self.build_interp_linear()
         else:
-            if interp_coord == 'CARDINAL':
+            if interp_coord == "CARDINAL":
                 tan_method = CubicHermiteSpline.CARDINAL
-            elif interp_coord == 'FINITE_DIFF':
+            elif interp_coord == "FINITE_DIFF":
                 tan_method = CubicHermiteSpline.FINITE_DIFF
             else:
                 raise NotImplementedError
             self.interp = self.build_interp_chs(tan_method)
 
     def __repr__(self):
-        return "ConstraintLine #{} ({} points)".format(self.id, self.nb_points)
+        return f"ConstraintLine #{self.id} ({self.nb_points} points)"
 
     @staticmethod
-    def get_lines_from_file(filename, interp_coord='LINEAR'):
+    def get_lines_from_file(filename, interp_coord="LINEAR", has_z=False):
         """
         Returns a list of ConstraintLine from an input file
+        @param has_z <bool>: if True, read Z along the line (POLYLINEZ shapefile required)
         TODO 1: Value is ignored in i2s file format
         """
         lines = []
         if filename is not None:
-            if filename.endswith('.i2s'):
+            if filename.endswith(".i2s"):
+                if has_z:
+                    raise TatooineException("i2s format does not carry Z; use a POLYLINEZ shapefile instead")
                 with bk.Read(filename) as in_i2s:
                     in_i2s.read_header()
                     for i, line in enumerate(in_i2s.get_open_polylines()):
                         lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord))
 
-            elif filename.endswith('.shp'):
-                if shp.get_shape_type(filename) not in (shapefile.POLYLINE, shapefile.POLYLINEZ, shapefile.POLYLINEM):
-                    raise TatooineException("The type of file %s is not POLYLINEZ[M]" % filename)
-                for i, line in enumerate(shp.get_open_polylines(filename)):
-                    lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord))
+            elif filename.endswith(".shp"):
+                shp_type = shp.get_shape_type(filename)
+                if has_z:
+                    if shp_type != shapefile.POLYLINEZ:
+                        raise TatooineException(
+                            f"Z-aware constraint lines require POLYLINEZ; file {filename} is of a different type"
+                        )
+                    for i, line in enumerate(shp.get_open_polylines(filename)):
+                        lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord, has_z=True))
+                else:
+                    if shp_type not in (shapefile.POLYLINE, shapefile.POLYLINEZ, shapefile.POLYLINEM):
+                        raise TatooineException(f"The type of file {filename} is not POLYLINEZ[M]")
+                    for i, line in enumerate(shp.get_open_polylines(filename)):
+                        lines.append(ConstraintLine(i, list(line.polyline().coords), interp_coord))
 
             else:
                 raise NotImplementedError("Only shp and i2s formats are supported for constraint lines")
@@ -81,7 +110,7 @@ class ConstraintLine:
         return lines
 
     @staticmethod
-    def get_lines_and_set_limits_from_sections(section_seq, interp_coord='LINEAR'):
+    def get_lines_and_set_limits_from_sections(section_seq, interp_coord="LINEAR"):
         """
         @brief: Returns a list of ConstraintLine from an sequence of cross-sections
         @param section_seq <CrossSectionSequence>: sequence of cross-sections
@@ -93,13 +122,12 @@ class ConstraintLine:
         for section in section_seq:
             first_coords.append(section.geom.coords[0][:2])
             last_coords.append(section.geom.coords[-1][:2])
-        lines = [ConstraintLine(0, first_coords, interp_coord),
-                 ConstraintLine(1, last_coords, interp_coord)]
+        lines = [ConstraintLine(0, first_coords, interp_coord), ConstraintLine(1, last_coords, interp_coord)]
 
         # Set limits
         for line_id, line in enumerate(lines):
             for section, Xt_line in zip(section_seq, line.Xt):
-                Xt_section = section.coord.array['Xt'][0] if line_id == 0 else section.coord.array['Xt'][-1]
+                Xt_section = section.coord.array["Xt"][0] if line_id == 0 else section.coord.array["Xt"][-1]
                 intersection = section.geom.interpolate(Xt_section)
                 section.add_limit(line_id, Xt_section, Xt_line, intersection)
 
@@ -107,19 +135,26 @@ class ConstraintLine:
 
     def build_interp_linear(self):
         """
-        @brief: Build a double linear interpolator for X and Y coordinates
+        @brief: Build a double linear interpolator for X and Y coordinates (and Z when has_z)
         """
+        fields = ["X", "Y", "Z"] if self.has_z else ["X", "Y"]
+
         def interp_xy_linear(Xt_new):
-            coord_int = []
-            for dist in Xt_new:
+            Xt_new = np.asarray(Xt_new)
+            result = np.empty(len(Xt_new), dtype=float_vars(fields))
+            for i, dist in enumerate(Xt_new):
                 point = self.geom.interpolate(dist)
-                coord_int.append(point.coords[0][:2])
-            return np.array(coord_int, dtype=float_vars(['X', 'Y']))
+                result["X"][i] = point.coords[0][0]
+                result["Y"][i] = point.coords[0][1]
+            if self.has_z:
+                result["Z"] = np.interp(Xt_new, self.Xt, self.Z)
+            return result
+
         return interp_xy_linear
 
     def build_interp_chs(self, tan_method):
         """
-        @brief: Build a Cubic Hermite Spline interpolator for X and Y coordinates
+        @brief: Build a Cubic Hermite Spline interpolator for X and Y coordinates (and Z when has_z)
         """
         spline_x = CubicHermiteSpline()  # x = spline_x(Xt)
         spline_y = CubicHermiteSpline()  # y = spline_y(Xt)
@@ -127,14 +162,23 @@ class ConstraintLine:
         spline_x.Initialize(np.vstack((self.Xt, self.coord[:, 0])).T, tan_method=tan_method)
         spline_y.Initialize(np.vstack((self.Xt, self.coord[:, 1])).T, tan_method=tan_method)
 
+        spline_z = None
+        if self.has_z:
+            spline_z = CubicHermiteSpline()
+            spline_z.Initialize(np.vstack((self.Xt, self.Z)).T, tan_method=tan_method)
+
+        fields = ["X", "Y", "Z"] if self.has_z else ["X", "Y"]
+
         def interp_xy_chs(Xt_new):
-            coord_int = []
-            for dist in Xt_new:
-                x = spline_x.evaluate(dist)
-                y = spline_y.evaluate(dist)
-                coord_int.append((x, y))
-            np_coord_int = np.array(coord_int, dtype=float_vars(['X', 'Y']))
-            return np_coord_int
+            Xt_new = np.asarray(Xt_new)
+            result = np.empty(len(Xt_new), dtype=float_vars(fields))
+            for i, dist in enumerate(Xt_new):
+                result["X"][i] = spline_x.evaluate(dist)
+                result["Y"][i] = spline_y.evaluate(dist)
+                if spline_z is not None:
+                    result["Z"][i] = spline_z.evaluate(dist)
+            return result
+
         return interp_xy_chs
 
     def coord_sampling_along_line(self, Xp1, Xp2, Xp_adm_int):
@@ -146,6 +190,6 @@ class ConstraintLine:
         @param: Xp2 <float>: ending curvilinear distance
         """
         # Building list of curvilinear distance in meters
-        Xp = (1 - Xp_adm_int)*Xp1 + Xp_adm_int*Xp2
+        Xp = (1 - Xp_adm_int) * Xp1 + Xp_adm_int * Xp2
         # Use coordinate interpolator
         return self.interp(Xp)
