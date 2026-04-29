@@ -12,59 +12,22 @@ node.
 End-to-end pipeline
 -------------------
 
+The function executes as a linear chain of six stages:
+
 .. mermaid::
 
-   flowchart TD
-       subgraph Inputs
-           direction LR
-           AX[axis.shp]
-           CS[cross_sections.shp]
-           CL2D[constraint_lines.shp<br/>2D]
-           CL3D[constraint_3D_lines.shp<br/>POLYLINEZ]
-       end
+   flowchart LR
+       I["Inputs<br/>axis · sections<br/>· constraint lines"] --> S1["Step 1<br/>Read &amp; project"]
+       S1 --> S2["Step 2<br/>Constraint lines<br/>+ limits"]
+       S2 --> S3["Step 3<br/>build_interp"]
+       S3 --> S4["Step 4<br/>Triangulate<br/>+ values"]
+       S4 --> O["Outputs<br/>nodes · mesh"]
 
-       subgraph Step1[Read & project]
-           R1[get_hydraulic_axis]
-           R2[CrossSectionSequence.from_file]
-           R3[compute_dist_proj_axe]
-           R4[check_intersections]
-           R5[sort_by_dist]
-           R1 --> R3 --> R4 --> R5
-           R2 --> R3
-       end
-
-       subgraph Step2[Constraint lines]
-           CL[ConstraintLine.get_lines_from_file<br/>or .get_lines_and_set_limits_from_sections]
-           FL[find_and_add_limits]
-           CL --> FL
-       end
-
-       subgraph Step3[Mesh interpolation]
-           BI[MeshConstructor.build_interp]
-           BIP[build_initial_profiles]
-           SAM[coord_sampling_along_line]
-           ZC[_compute_line_z_correction]
-           ICL[interp_coord_linear<br/>per bed]
-           AP[add_points]
-           BI --> BIP --> SAM --> ZC --> ICL --> AP
-       end
-
-       subgraph Step4[Triangulate & values]
-           BM[build_mesh<br/>via triangle]
-           IV[interp_values_from_geom<br/>1D or 2D mode]
-           BM --> IV
-       end
-
-       subgraph Outputs
-           direction LR
-           ON[outfile_nodes<br/>.shp .xyz]
-           OM[outfile_mesh<br/>.slf .t3s .xml]
-       end
-
-       Inputs --> Step1 --> Step2 --> Step3 --> Step4 --> Outputs
-
-The four steps below match the canonical mesh-generation skeleton from
-[TUC2019]_, with steps 3 and 4 fused into the ``MeshConstructor`` machinery.
+The four numbered steps match the canonical mesh-generation skeleton
+from [TUC2019]_, with steps 3 and 4 fused into the ``MeshConstructor``
+machinery. Step 3 itself is a triple loop over zones, beds, and
+intermediate intermediate cross-sections — see
+:ref:`mai-build-interp-loop` below.
 
 Step 1 — Read inputs and project
 --------------------------------
@@ -114,8 +77,28 @@ mode (``BILINEAR``, ``BICUBIC``, ``BIVARIATE_SPLINE``).
 then attaches each line as a limit on every section it crosses (snap
 distance ``dist_max``).
 
+.. _mai-build-interp-loop:
+
 Step 3 — Mesh interpolation
 ---------------------------
+
+:meth:`~tatooinemesher.mesh_constructor.MeshConstructor.build_interp`
+is a triple loop:
+
+.. mermaid::
+
+   flowchart TD
+       BIP[build_initial_profiles<br/>nodes of first &amp; last sections]
+       BIP --> Z["For each zone (section i, i+1)"]
+       Z --> B["For each bed (L_j, L_j+1)"]
+       B --> SAM[coord_sampling_along_line<br/>on L_j and L_j+1]
+       SAM --> ZC[_compute_line_z_correction<br/>if has_z]
+       ZC --> XL["For each intermediate x_l"]
+       XL --> ICL[Bed.interp_coord_linear<br/>lateral nodes]
+       ICL --> AP[add_points<br/>append to MeshConstructor]
+       AP --> XL
+       XL -. next bed .-> B
+       B -. next zone .-> Z
 
 :class:`~tatooinemesher.mesh_constructor.MeshConstructor` walks the
 sequence in
