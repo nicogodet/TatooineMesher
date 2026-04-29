@@ -10,19 +10,11 @@ from numpy.lib.recfunctions import append_fields, rename_fields
 from scipy import interpolate
 from shapely.geometry import Point
 
-try:
-    from pyteltools.geom import BlueKenue as bk
-    from pyteltools.geom import Shapefile as shp
-    from pyteltools.geom import geometry
-    from pyteltools.slf import Serafin
-    from pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
-except ImportError:
-    bk = None
-    shp = None
-    geometry = None
-    Serafin = None
-    basic_2D_vars_IDs = None
-
+from tatooinemesher._external.pyteltools.geom import BlueKenue as bk
+from tatooinemesher._external.pyteltools.geom import Shapefile as shp
+from tatooinemesher._external.pyteltools.geom import geometry
+from tatooinemesher._external.pyteltools.slf import Serafin
+from tatooinemesher._external.pyteltools.slf.variable.variables_2d import basic_2D_vars_IDs
 from tatooinemesher.section import Bed
 from tatooinemesher.utils import TatooineException, float_vars, logger
 
@@ -605,11 +597,6 @@ class MeshConstructor:
                         out_geo.write("{:f}{} B {:f} {:f}\n".format(row["Xt"], layers_str, row["X"], row["Y"]))
             return
 
-        if geometry is None or bk is None or shp is None:
-            raise ImportError(
-                "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
-            )
-
         lines = []
         for dist in np.unique(self.points["Xl"]):
             pos = self.points["Xl"] == dist
@@ -698,11 +685,6 @@ class MeshConstructor:
                 fileout.write(template_render)
 
         elif path.endswith(".slf"):
-            if Serafin is None:
-                raise ImportError(
-                    "PyTelTools is required for this feature. Install it with: pip install TatooineMesher[pyteltools]"
-                )
-
             with Serafin.Write(path, lang, overwrite=True) as resout:
                 output_header = Serafin.SerafinHeader(
                     title=f"{os.path.basename(path)} (Written by TatooineMesher)", lang=lang

@@ -9,8 +9,8 @@ from crue10.etude import Etude
 from crue10.run.resultats_calcul import ResultatsCalcul
 from crue10.utils import ExceptionCrue10
 from numpy.lib.recfunctions import unstructured_to_structured
-from pyteltools.slf import Serafin
 
+from tatooinemesher._external.pyteltools.slf import Serafin
 from tatooinemesher.constraint_line import ConstraintLine
 from tatooinemesher.interp.raster import interp_raster
 from tatooinemesher.mesh_constructor import MeshConstructor

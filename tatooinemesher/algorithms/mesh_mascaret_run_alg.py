@@ -6,8 +6,8 @@ import numpy as np
 from crue10.utils import ExceptionCrue10
 from mascaret.mascaret_file import MascaretFile
 from mascaret.mascaretgeo_file import MascaretGeoFile
-from pyteltools.slf import Serafin
 
+from tatooinemesher._external.pyteltools.slf import Serafin
 from tatooinemesher.constraint_line import ConstraintLine
 from tatooinemesher.mesh_constructor import MeshConstructor
 from tatooinemesher.section import CrossSection, CrossSectionSequence
