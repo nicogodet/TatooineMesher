@@ -26,3 +26,4 @@ Thumbs.db
 TatooineMesher.egg-info/
 dist/
 build/
+docs/build/

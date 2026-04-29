@@ -36,6 +36,13 @@ gdal = [
 all = [
     "TatooineMesher[crue10,pyteltools,gdal]",
 ]
+docs = [
+    "sphinx>=8",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    "sphinxcontrib-mermaid",
+]
 
 [project.urls]
 Homepage = "https://github.com/CNR-Engineering/TatooineMesher"
