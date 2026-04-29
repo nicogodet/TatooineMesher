@@ -27,14 +27,11 @@ dependencies = [
 crue10 = [
     "Crue10_tools @ git+https://github.com/CNR-Engineering/Crue10_tools.git@4.0",
 ]
-pyteltools = [
-    "PyTelTools @ git+https://github.com/CNR-Engineering/PyTelTools.git@master",
-]
 gdal = [
     "gdal",
 ]
 all = [
-    "TatooineMesher[crue10,pyteltools,gdal]",
+    "TatooineMesher[crue10,gdal]",
 ]
 
 [project.urls]
@@ -44,12 +41,17 @@ Homepage = "https://github.com/CNR-Engineering/TatooineMesher"
 include = ["tatooinemesher*"]
 exclude = ["cli*", "tests*"]
 
+[tool.setuptools.package-data]
+"tatooinemesher.data" = ["*.xml"]
+"tatooinemesher._external.pyteltools.slf.data" = ["*.csv"]
+
 [tool.setuptools.dynamic]
 version = {attr = "tatooinemesher.VERSION"}
 
 [tool.ruff]
 line-length = 120
 target-version = "py39"
+extend-exclude = ["tatooinemesher/_external"]
 
 [tool.ruff.lint]
 select = [
