@@ -1,5 +1,5 @@
-from scipy import interpolate
 import numpy as np
+from scipy import interpolate
 
 
 def interp_raster(raster):

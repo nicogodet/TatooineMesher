@@ -1,1 +1,2 @@
 include tatooinemesher/data/*.xml
+include tatooinemesher/_external/pyteltools/slf/data/*.csv
