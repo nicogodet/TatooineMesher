@@ -84,7 +84,8 @@ class MeshConstructor:
         else:
             self.nb_var = 0
 
-        self.points = np.empty(0, dtype=MeshConstructor.POINTS_DTYPE)
+        self._points = np.empty(0, dtype=MeshConstructor.POINTS_DTYPE)
+        self._pending_points = []  # chunks added by `add_points`, concatenated lazily (see `points`)
         self.nodes_values = np.empty([0, 0, 0], dtype=float)
         self.i_pt = -1
         self.segments = np.empty([0, 2], dtype=int)
@@ -92,6 +93,20 @@ class MeshConstructor:
 
         self.casiers_nodes_idx = []
         self.nodes_fp = np.empty(0, dtype=MeshConstructor.POINTS_FP_DTYPE)
+
+    @property
+    def points(self):
+        # Concatenate pending chunks only once on access: calling `np.hstack` in each `add_points`
+        # re-copied the whole (growing) array every time, i.e. quadratic cost on long reaches.
+        if self._pending_points:
+            self._points = np.concatenate([self._points] + self._pending_points)
+            self._pending_points = []
+        return self._points
+
+    @points.setter
+    def points(self, value):
+        self._points = value
+        self._pending_points = []
 
     @property
     def nb_nodes_in_riverbed(self):
@@ -118,7 +133,7 @@ class MeshConstructor:
         if self.casiers_nodes_idx:
             raise TatooineException("Impossible to add points in river bed after having considered the floodplain")
 
-        new_coord = np.empty(len(coord), dtype=self.points.dtype)
+        new_coord = np.empty(len(coord), dtype=MeshConstructor.POINTS_DTYPE)
         # FIXME: avoid copying in using np.lib.recfunctions.append_fields?
         for var in ["X", "Y", "xt", "Xt_upstream", "Xt_downstream"]:  # copy existing columns
             new_coord[var] = coord[var]
@@ -133,7 +148,7 @@ class MeshConstructor:
         else:
             new_coord["z_correction"] = z_corrections
         self.i_pt += len(new_coord)
-        self.points = np.hstack((self.points, new_coord))
+        self._pending_points.append(new_coord)
 
     def add_floodplain_mesh(self, triangulation, points):
         pos_start = self.nb_nodes
